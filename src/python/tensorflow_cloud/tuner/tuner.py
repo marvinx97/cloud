@@ -337,6 +337,10 @@ class CloudTuner(tuner_module.Tuner):
         study_config: Optional[Dict[Text, Any]] = None,
         max_trials: int = None,
         study_id: Optional[Text] = None,
+        train_locally: Optional[bool] = True,
+        container_uri: Optional[Text] = None,
+        staging_bucket: Optional[Text] = None,
+        job_spec: Optional[Text] = None,
         **kwargs
     ):
 
@@ -358,9 +362,23 @@ class CloudTuner(tuner_module.Tuner):
                 been exhausted.
             study_id: An identifier of the study. The full study name will be
                 projects/{project_id}/locations/{region}/studies/{study_id}.
+            train_locally: A flag to specify execution environment. Set to True
+                to train locally, and False to use AI Platform training.
+            container_uri: based image to use for AI Platform Training. If not
+                specified will use the latest AI Platform Tensorflow deep
+                learning container.
+            staging_bucket: Google Cloud Storage path for temporary assets and
+                AI Platform training output, required for remote training.
+                Overwrites value provided in job spec.
+            job_spec: AI Platform Training job_spec. If none is provided a
+                default cluster spec and distribution strategy will be used.
             **kwargs: Keyword arguments relevant to all `Tuner` subclasses.
                 Please see the docstring for `Tuner`.
         """
+        self.train_locally = train_locally
+        self.container_uri = container_uri
+        self.staging_bucket = staging_bucket
+        self.job_spec = job_spec
 
         oracle = CloudOracle(
             project_id=project_id,
@@ -371,6 +389,80 @@ class CloudTuner(tuner_module.Tuner):
             max_trials=max_trials,
             study_id=study_id,
         )
-        super(CloudTuner, self,).__init__(
+        super(CloudTuner, self).__init__(
             oracle=oracle, hypermodel=hypermodel, **kwargs
         )
+
+    def run_trial(self, trial, *fit_args, **fit_kwargs):
+        """Evaluates a set of hyperparameter values.
+
+        This method is called during `search` to evaluate a set of
+        hyperparameters.
+        Arguments:
+            trial: A `Trial` instance that contains the information
+              needed to run this trial. `Hyperparameters` can be accessed
+              via `trial.hyperparameters`.
+            *fit_args: Positional arguments passed by `search`.
+            **fit_kwargs: Keyword arguments passed by `search`.
+        """
+        if self.train_locally:
+            super(CloudTuner, self).run_trial(trial, *fit_args, **fit_kwargs)
+            return
+        raise NotImplementedError("Remote execution is not implemented.")
+
+    def save_model(self, trial_id, model, step=0):
+        if self.train_locally:
+            super(CloudTuner, self).save_model(trial_id, model, step=0)
+            return
+        raise NotImplementedError("Remote execution is not implemented.")
+
+    def load_model(self, trial):
+        if self.train_locally:
+            return super(CloudTuner, self).load_model(trial)
+        raise NotImplementedError("Remote execution is not implemented.")
+
+    def on_epoch_end(self, trial, model, epoch, logs=None):
+        """A hook called at the end of every epoch.
+
+        Arguments:
+            trial: A `Trial` instance.
+            model: A Keras `Model`.
+            epoch: The current epoch number.
+            logs: Dict. Metrics for this epoch. This should include
+              the value of the objective for this epoch.
+        """
+        if self.train_locally:
+            super(CloudTuner, self).on_epoch_end(trial, model, epoch, logs=None)
+            return
+
+        raise NotImplementedError("Remote execution is not implemented.")
+
+    def _configure_tensorboard_dir(self, callbacks, trial_id):
+        if self.train_locally:
+            return super(
+                CloudTuner,
+                self
+                )._configure_tensorboard_dir(callbacks, trial_id)
+        raise NotImplementedError("Remote execution is not implemented.")
+
+    def _get_checkpoint_dir(self, trial_id, epoch):
+        if self.train_locally:
+            return super(CloudTuner, self)._get_checkpoint_dir(trial_id, epoch)
+        raise NotImplementedError("Remote execution is not implemented.")
+
+    def _get_checkpoint_fname(self, trial_id, epoch):
+        if self.train_locally:
+            return super(
+                CloudTuner,
+                self
+                )._get_checkpoint_fname(trial_id, epoch)
+
+        raise NotImplementedError("Remote execution is not implemented.")
+
+    def _checkpoint_model(self, model, trial_id, epoch):
+        if self.train_locally:
+            return super(
+                CloudTuner,
+                self
+                )._checkpoint_model(model, trial_id, epoch)
+        raise NotImplementedError("Remote execution is not implemented.")
